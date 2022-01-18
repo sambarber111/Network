@@ -120,10 +120,9 @@ class ICMPPing(NetworkApplication):
             socket.AF_INET,
             socket.SOCK_RAW,
             socket.IPPROTO_ICMP
-
         )
         # 2. Call sendOnePing function
-        self.sendOnePing(self, icmpSocket, destinationAddress, 1)
+        self.sendOnePing(icmpSocket, destinationAddress, 1)
         # 3. Call receiveOnePing function
         # 4. Close ICMP socket
         # 5. Return total network delay
@@ -133,8 +132,9 @@ class ICMPPing(NetworkApplication):
         print('Ping to: %s...' % (args.hostname))
         # 1. Look up hostname, resolving it to an IP address
         ipAddress = socket.gethostbyname(args.hostname)
+        print(ipAddress)
         # 2. Call doOnePing function, approximately every second
-        self.doOnePing(self, ipAddress, 10)
+        self.doOnePing(ipAddress, 10)
         # 3. Print out the returned delay (and other relevant details) using the printOneResult method
         self.printOneResult('1.1.1.1', 50, 20.0, 150) # Example use of printOneResult - complete as appropriate
         # 4. Continue this process until stopped

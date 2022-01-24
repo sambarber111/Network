@@ -4,6 +4,7 @@
 import argparse
 import ipaddress
 import socket
+import select
 import os
 import sys
 import struct
@@ -13,7 +14,7 @@ import time
 def setupArgumentParser() -> argparse.Namespace:
         parser = argparse.ArgumentParser(
             description='A collection of Network Applications developed for SCC.203.')
-        parser.set_defaults(func=ICMPPing, hostname='lancaster.ac.uk')
+        parser.set_defaults(func=ICMPPing, hostname='amazon.com')
         subparsers = parser.add_subparsers(help='sub-command help')
         
         parser_p = subparsers.add_parser('ping', aliases=['p'], help='run ping')
@@ -93,9 +94,27 @@ class NetworkApplication:
 
 class ICMPPing(NetworkApplication):
 
-    def receiveOnePing(self, icmpSocket, destinationAddress, ID, timeout):
+    def receiveOnePing(self, icmpSocket, destinationAddress, ID, time_sent, timeout):
         # 1. Wait for the socket to receive a reply
+        time_left = timeout
+        while True:
+            started_select = time.time()
+            ready = select.select([icmpSocket], [], [], time_left)
+            how_long_in_select = time.time() - started_select
+
+            if ready[0] == []:  # Timeout
+                return
+
         # 2. Once received, record time of receipt, otherwise, handle a timeout
+            time_received = time.time()
+
+            rec_packet, addr = icmpSocket.recvfrom(1024)
+            icmp_header = rec_packet[20:28]
+
+            type, code, checksum, p_id, sequence = struct.unpack('bbHHh', icmp_header)
+
+            if p_id == ID:
+                return time_received - time_sent
         # 3. Compare the time of receipt to time of sending, producing the total network delay
         # 4. Unpack the packet header for useful information, including the ID
         # 5. Check that the ID matches between the request and reply
@@ -105,39 +124,44 @@ class ICMPPing(NetworkApplication):
     def sendOnePing(self, icmpSocket, destinationAddress, ID):
         ipAddress = socket.gethostbyname(destinationAddress)
         # 1. Build ICMP header
-        header = struct.pack("iiii", 8, 0, 0, ID)
+        header = struct.pack("bbHHh", 8, 0, 0, ID, 1)
         # 2. Checksum ICMP packet using given function
         check = NetworkApplication.checksum(self, header)
         # 3. Insert checksum into packet
-        header = struct.pack("iiii", 8, 0, check, ID)
+        header = struct.pack("bbHHh", 8, 0, check, ID, 1)
         # 4. Send packet using socket
+        icmpSocket.sendto(header, (ipAddress, 1))
         # 5. Record time of sending
+        return time.time()
         pass
 
     def doOnePing(self, destinationAddress, timeout):
-        # 1. Create ICMP socket
         icmpSocket = socket.socket(
             socket.AF_INET,
             socket.SOCK_RAW,
             socket.IPPROTO_ICMP
         )
-        # 2. Call sendOnePing function
-        self.sendOnePing(icmpSocket, destinationAddress, 1)
-        # 3. Call receiveOnePing function
-        # 4. Close ICMP socket
-        # 5. Return total network delay
+
+        time_sent = self.sendOnePing(icmpSocket, destinationAddress, 1)
+        
+        total_delay = self.receiveOnePing(icmpSocket, destinationAddress, 1, time_sent, timeout=1)
+        
+        icmpSocket.close()
+        
+        return total_delay
         pass
 
     def __init__(self, args):
-        print('Ping to: %s...' % (args.hostname))
-        # 1. Look up hostname, resolving it to an IP address
-        ipAddress = socket.gethostbyname(args.hostname)
-        print(ipAddress)
-        # 2. Call doOnePing function, approximately every second
-        self.doOnePing(ipAddress, 10)
-        # 3. Print out the returned delay (and other relevant details) using the printOneResult method
-        self.printOneResult('1.1.1.1', 50, 20.0, 150) # Example use of printOneResult - complete as appropriate
-        # 4. Continue this process until stopped
+        while True:
+            print('Ping to: %s...' % (args.hostname))
+            # Look up hostname, resolving it to an IP address
+            ipAddress = socket.gethostbyname(args.hostname)
+
+            delay = self.doOnePing(ipAddress, 10)
+            delay = round(delay * 1000.0, 4)
+        
+            self.printOneResult(ipAddress, 50, delay, 150)
+            time.sleep(1)
 
 
 class Traceroute(NetworkApplication):

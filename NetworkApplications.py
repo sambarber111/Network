@@ -9,12 +9,13 @@ import os
 import sys
 import struct
 import time
+from turtle import delay
 
 
 def setupArgumentParser() -> argparse.Namespace:
         parser = argparse.ArgumentParser(
             description='A collection of Network Applications developed for SCC.203.')
-        parser.set_defaults(func=ICMPPing, hostname='amazon.com')
+        parser.set_defaults(func=Traceroute, hostname='amazon.co.uk')
         subparsers = parser.add_subparsers(help='sub-command help')
         
         parser_p = subparsers.add_parser('ping', aliases=['p'], help='run ping')
@@ -165,10 +166,67 @@ class ICMPPing(NetworkApplication):
 
 
 class Traceroute(NetworkApplication):
+    def make_pack(self):
+        this_checksum = 0
 
+        header = struct.pack("bbHHh", 8, 0, this_checksum, 1, 1)
+        this_checksum = NetworkApplication.checksum(self, header)
+        header = struct.pack("bbHHh", 8, 0, this_checksum, 1, 1)
+
+        return header
+
+    def doOneTraceRoute(self, destinationAddress, ttl, timeout, time_left):
+        my_socket = socket.socket(
+            socket.AF_INET,
+            socket.SOCK_RAW,
+            socket.IPPROTO_ICMP
+        )
+
+        my_socket.setsockopt(socket.SOL_IP, socket.IP_TTL, ttl)
+        my_socket.settimeout(timeout)
+
+        packet_to_send = self.make_pack()
+        my_socket.sendto(packet_to_send, (destinationAddress, 0))
+        time_sent = time.time()
+
+        started_select = time.time()
+        ready = select.select([my_socket], [], [], time_left)
+        time_in_select = time.time() - started_select
+
+        time_received = time.time()
+        rec_packet, addr = my_socket.recvfrom(1024)
+        icmp_header = rec_packet[20:28]
+        type, code, checksum, p_id, sequence = struct.unpack('bbHHh' , icmp_header)
+
+        if type == 11:
+            self.printOneResult(addr[0], 50, ((time_received - time_sent) * 1000), ttl)
+        
+        if type == 0:
+            self.printOneResult(addr[0], 50, ((time_received - time_sent) * 1000), ttl)
+            print("Destination Reached")
+
+        my_socket.close()
+
+    def fullTraceRoute(self, timeout):
+        time_left = timeout
+        dest = socket.gethostbyname(args.hostname)
+        print('Traceroute to: %s...' % (args.hostname))
+
+        for ttl in range(1, 20):
+            self.doOneTraceRoute(dest, ttl, timeout, time_left)
+            time.sleep(1)
+
+        
+        
+        return
+
+    
     def __init__(self, args):
         # Please ensure you print each result using the printOneResult method!
-        print('Traceroute to: %s...' % (args.hostname))
+        self.fullTraceRoute(timeout=15)
+
+
+
 
 
 class WebServer(NetworkApplication):

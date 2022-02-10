@@ -2,6 +2,7 @@
 # -*- coding: UTF-8 -*-
 
 import argparse
+from distutils.file_util import write_file
 import ipaddress
 import socket
 import select
@@ -15,7 +16,7 @@ from turtle import delay
 def setupArgumentParser() -> argparse.Namespace:
         parser = argparse.ArgumentParser(
             description='A collection of Network Applications developed for SCC.203.')
-        parser.set_defaults(func=Traceroute, hostname='lancaster.ac.uk')
+        parser.set_defaults(func=WebServer, hostname='lancaster.ac.uk')
         subparsers = parser.add_subparsers(help='sub-command help')
         
         parser_p = subparsers.add_parser('ping', aliases=['p'], help='run ping')
@@ -239,23 +240,47 @@ class Traceroute(NetworkApplication):
 
 class WebServer(NetworkApplication):
 
-    def handleRequest(tcpSocket):
+    HOST = '127.0.0.1'  # localhost
+    PORT = 4322        # Non-privileged port
+
+    def handleRequest(self, tcpSocket, client_addr):
         # 1. Receive request message from the client on connection socket
+        request = tcpSocket.recv(1024).decode('utf-8')
+        string_list = request.split("/", 1)
+        string_list2 = string_list[1].split(" ")
         # 2. Extract the path of the requested object from the message (second part of the HTTP header)
+        request_path = string_list2[0]
+        print(string_list2[0])
         # 3. Read the corresponding file from disk
+        try:
+            file = open(request_path).read()
+            header = 'HTTP/1.0 200 OK\n\n'
+        except:
+            file = "File not Found :("
+            header = 'HTTP/1.0 404 Not Found\n\n'
         # 4. Store in temporary buffer
         # 5. Send the correct HTTP response error
+        http_response = header + file
         # 6. Send the content of the file to the socket
+        tcpSocket.sendall(http_response.encode())
         # 7. Close the connection socket
+        tcpSocket.close()
         pass
 
     def __init__(self, args):
-        print('Web Server starting on port: %i...' % (args.port))
+        # print('Web Server starting on port: %i...' % (args.port))
         # 1. Create server socket
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # 2. Bind the server socket to server address and server port
+        server_socket.bind((self.HOST , self.PORT))
         # 3. Continuously listen for connections to server socket
+        server_socket.listen()
+        connected_socket, client_addr = server_socket.accept()
+        print('Connection from: ', client_addr)
         # 4. When a connection is accepted, call handleRequest function, passing new connection socket (see https://docs.python.org/3/library/socket.html#socket.socket.accept)
+        self.handleRequest(connected_socket, client_addr)
         # 5. Close server socket
+        server_socket.close()
 
 
 class Proxy(NetworkApplication):

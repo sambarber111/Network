@@ -16,7 +16,7 @@ from turtle import delay
 def setupArgumentParser() -> argparse.Namespace:
         parser = argparse.ArgumentParser(
             description='A collection of Network Applications developed for SCC.203.')
-        parser.set_defaults(func=WebServer, hostname='lancaster.ac.uk')
+        parser.set_defaults(func=Proxy, hostname='lancaster.ac.uk')
         subparsers = parser.add_subparsers(help='sub-command help')
         
         parser_p = subparsers.add_parser('ping', aliases=['p'], help='run ping')
@@ -285,8 +285,57 @@ class WebServer(NetworkApplication):
 
 class Proxy(NetworkApplication):
 
+    HOST = '127.0.0.1'
+    PORT = 4321
+
+    def handleRequest(self, tcpSocket, client_addr):
+        # 1. Receive request message from client on connection socket
+        request = tcpSocket.recv(1024).decode('utf-8')
+        print(request)
+
+        # 2. Split the message to extract the hostname of the request
+        string_list = request.split('/' , 1)
+        string_list2 = string_list[1].split('/' , 2)
+        print(string_list2[1])
+
+        # 3. Get the IP address of the request
+        request_ip = socket.gethostbyname(string_list2[1])
+        print(request_ip)
+        request_port = 80
+
+        header = 'HTTP/1.0 200 OK\n\n'
+
+        http_request = request + header
+
+        # 4. Connecting to the destination server 
+        socket1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        socket1.settimeout(1000)
+        socket1.connect((request_ip , request_port))
+        socket1.sendall(http_request.encode())
+
+        # 5. Sending the server's response to the client socket.
+        while 1:
+            data = socket1.recv(1024)
+            tcpSocket.send(data)
+
+
+
     def __init__(self, args):
-        print('Web Proxy starting on port: %i...' % (args.port))
+        # print('Web Proxy starting on port: %i...' % (args.port))
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        server_socket.bind((self.HOST , self.PORT))
+
+        server_socket.listen()
+
+        connected_socket, client_addr = server_socket.accept()
+
+        print('Connection from: ' , client_addr)
+
+        self.handleRequest(connected_socket, client_addr)
+
+        server_socket.close()
+
 
 
 if __name__ == "__main__":

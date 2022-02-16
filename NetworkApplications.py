@@ -10,6 +10,7 @@ import os
 import sys
 import struct
 import time
+import threading
 from turtle import delay
 
 
@@ -317,8 +318,6 @@ class Proxy(NetworkApplication):
         while 1:
             data = socket1.recv(1024)
             tcpSocket.send(data)
-
-
 
     def __init__(self, args):
         # print('Web Proxy starting on port: %i...' % (args.port))

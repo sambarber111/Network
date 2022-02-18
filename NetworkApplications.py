@@ -287,7 +287,7 @@ class WebServer(NetworkApplication):
 class Proxy(NetworkApplication):
 
     HOST = '127.0.0.1'
-    PORT = 4321
+    PORT = 54322
 
     def handleRequest(self, tcpSocket, client_addr):
         # 1. Receive request message from client on connection socket
@@ -316,24 +316,24 @@ class Proxy(NetworkApplication):
 
         # 5. Sending the server's response to the client socket.
         while 1:
-            data = socket1.recv(1024)
-            tcpSocket.send(data)
+            try:
+                data = socket1.recv(1024)
+                tcpSocket.send(data)
+            except:
+                break
 
     def __init__(self, args):
         # print('Web Proxy starting on port: %i...' % (args.port))
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
         server_socket.bind((self.HOST , self.PORT))
-
         server_socket.listen()
 
-        connected_socket, client_addr = server_socket.accept()
+        while True:
+            connected_socket, client_addr = server_socket.accept()
+            print('Connection from: ' , client_addr)
+            self.handleRequest(connected_socket, client_addr)
 
-        print('Connection from: ' , client_addr)
-
-        self.handleRequest(connected_socket, client_addr)
-
-        server_socket.close()
+        # server_socket.close()
 
 
 

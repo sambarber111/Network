@@ -2,7 +2,6 @@
 # -*- coding: UTF-8 -*-
 
 import argparse
-from distutils.file_util import write_file
 import ipaddress
 import socket
 import select
@@ -10,8 +9,6 @@ import os
 import sys
 import struct
 import time
-import threading
-from turtle import delay
 
 
 def setupArgumentParser() -> argparse.Namespace:
@@ -230,14 +227,9 @@ class Traceroute(NetworkApplication):
 
         return
 
-    
     def __init__(self, args):
         # Please ensure you print each result using the printOneResult method!
         self.fullTraceRoute(timeout=15)
-
-
-
-
 
 class WebServer(NetworkApplication):
 
@@ -247,11 +239,11 @@ class WebServer(NetworkApplication):
     def handleRequest(self, tcpSocket, client_addr):
         # 1. Receive request message from the client on connection socket
         request = tcpSocket.recv(1024).decode('utf-8')
-        string_list = request.split("/", 1)
-        string_list2 = string_list[1].split(" ")
+        split = request.split("/", 1)
+        requested_webserver = split[1].split(" ")
         # 2. Extract the path of the requested object from the message (second part of the HTTP header)
-        request_path = string_list2[0]
-        print(string_list2[0])
+        request_path = requested_webserver[0]
+        print(requested_webserver[0])
         # 3. Read the corresponding file from disk
         try:
             file = open(request_path).read()
@@ -287,55 +279,87 @@ class WebServer(NetworkApplication):
 class Proxy(NetworkApplication):
 
     HOST = '127.0.0.1'
-    PORT = 54322
+    PORT = 54336
+
+    cached_requests = []
+    cached_responses = []
+    
+    def request_server(self, requested_webserver, request, tcpSocket):
+        # Get the IP address of the request
+        request_ip = socket.gethostbyname(requested_webserver)
+        request_port = 80
+
+        # Create the header.
+        header = 'HTTP/1.0 200 OK\n\n'
+        http_request = request + header
+
+        # Connecting to the destination server 
+        socket1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        socket1.settimeout(10)
+        socket1.connect((request_ip , request_port))
+
+        # Sending the request to the server.
+        socket1.sendall(http_request.encode())
+
+        page = ''
+
+        # Receiving the server's response.
+        try:
+            while True:
+                # Receive the server's response and decode it to be stored.
+                data = socket1.recv(1024)
+                page += (data.decode())
+
+                # When there is no more data to be received, break.
+                if not data:
+                    break
+        except:
+            pass
+
+        # Creating a string which contains the HTML data to be stored in cache.
+        page1 = page.split('HTTP/1.1 400', 1)
+        html_data = page1[0]
+
+        # Appending the request to the request cache and the corresponding response to the response cache.
+        self.cached_requests.append(requested_webserver)
+        self.cached_responses.append(html_data)
+
+        # Sending the server's response to the client.
+        tcpSocket.send(page.encode())
+                
 
     def handleRequest(self, tcpSocket, client_addr):
         # 1. Receive request message from client on connection socket
         request = tcpSocket.recv(1024).decode('utf-8')
-        print(request)
 
         # 2. Split the message to extract the hostname of the request
-        string_list = request.split('/' , 1)
-        string_list2 = string_list[1].split('/' , 2)
-        print(string_list2[1])
+        split = request.split('/' , 1)
+        split2 = split[1].split('/' , 2)
+        requested_webserver = split2[1]
 
-        # 3. Get the IP address of the request
-        request_ip = socket.gethostbyname(string_list2[1])
-        print(request_ip)
-        request_port = 80
-
-        header = 'HTTP/1.0 200 OK\n\n'
-
-        http_request = request + header
-
-        # 4. Connecting to the destination server 
-        socket1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        socket1.settimeout(1000)
-        socket1.connect((request_ip , request_port))
-        socket1.sendall(http_request.encode())
-
-        # 5. Sending the server's response to the client socket.
-        while 1:
-            try:
-                data = socket1.recv(1024)
-                tcpSocket.send(data)
-            except:
-                break
+        # Checks to see if the requested web server already exists in the cache.
+        if requested_webserver in self.cached_requests:
+            # If the request already exists in the cache, find the index of the request.
+            # Find the corresponding index of the request in the cached responses and send it to the client.
+            index = self.cached_requests.index(requested_webserver)
+            tcpSocket.send(self.cached_responses[index].encode())
+            print("Sent from Cache.")
+        else:
+            # If the request does not exist in the cache, send a request to the server.
+            self.request_server(requested_webserver, request, tcpSocket)
+            print("Successfully received response from " + requested_webserver)
 
     def __init__(self, args):
-        # print('Web Proxy starting on port: %i...' % (args.port))
+        # Create the server socket, bind it to the host and set it to listen for requests.
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.bind((self.HOST , self.PORT))
         server_socket.listen()
 
+        # Accept any incoming requests, and handle the request.
         while True:
             connected_socket, client_addr = server_socket.accept()
             print('Connection from: ' , client_addr)
             self.handleRequest(connected_socket, client_addr)
-
-        # server_socket.close()
-
-
 
 if __name__ == "__main__":
     args = setupArgumentParser()

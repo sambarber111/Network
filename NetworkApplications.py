@@ -170,16 +170,23 @@ class Traceroute(NetworkApplication):
     def sendOnePing(self, icmpSocket, destinationAddress):
         dest = socket.gethostbyname(destinationAddress)
 
+        # Create the header with a dummy checksum of 0.
         checksum = 0
-
         header = struct.pack("bbHHh", 8, 0, checksum, 1, 1)
+
+        # Calculate checksum using checksum() function.
         checksum = NetworkApplication.checksum(self, header)
+
+        # Create the new header with the correct checksum.
         header = struct.pack("bbHHh", 8, 0, checksum, 1, 1)
 
+        # Send the header to the destination address.
         icmpSocket.sendto(header, (destinationAddress, 0))
 
+        # Record the time sent.
         time_sent = time.time()
 
+        # Return time sent.
         return time_sent
 
     def receiveOnePing(self, icmpSocket, timeLeft, time_sent, ttl):
@@ -187,40 +194,52 @@ class Traceroute(NetworkApplication):
         ready = select.select([icmpSocket], [], [], timeLeft)
         time_in_select = time.time() - started_select
 
+        # Record the time received.
         time_received = time.time()
+
+        # Receive and unpack the header.
         received_packet, addr = icmpSocket.recvfrom(1024)
         received_header = received_packet[20:28]
         type, code, checksum, p_id, sequence = struct.unpack('bbHHh' , received_header)
 
+        # If the destination has not yet been reached, print the address of the current node and the delay etc.
         if type == 11:
             self.printOneResult(addr[0], 50, ((time_received - time_sent) * 1000), ttl)
         
+        # If the destination has been reached, print a prompt and the delay etc.
         if type == 0:
             self.printOneResult(50, 50, ((time_received - time_sent) * 1000), ttl)
             print("Destination Reached")
         
+        # Return time received.
         return time_received
 
     def doOneTraceRoute(self, destinationAddress, ttl, timeout, timeLeft):
+        # Creating the Socket.
         icmpSocket = socket.socket(
             socket.AF_INET,
             socket.SOCK_RAW,
             socket.IPPROTO_ICMP
         )
-
         icmpSocket.setsockopt(socket.SOL_IP, socket.IP_TTL, ttl)
         icmpSocket.settimeout(timeout)
 
+        # Send one ping and store the time sent.
         time_sent = self.sendOnePing(icmpSocket, destinationAddress)
+
+        # Execute receiveOnePing().
         self.receiveOnePing(icmpSocket, timeLeft, time_sent, ttl)
 
+        # Close the socket.
         icmpSocket.close()
 
     def fullTraceRoute(self, timeout):
+        # Extracting the destination address.
         destinationAddress = socket.gethostbyname(args.hostname)
         timeLeft = timeout
         print('Traceroute to: %s...' % (args.hostname))
 
+        # Execute traceroute with a specified maximum number of jumps.
         for ttl in range(1, self.MAX_JUMPS):
             self.doOneTraceRoute(destinationAddress, ttl, timeout, timeLeft)
             time.sleep(1)
@@ -228,7 +247,6 @@ class Traceroute(NetworkApplication):
         return
 
     def __init__(self, args):
-        # Please ensure you print each result using the printOneResult method!
         self.fullTraceRoute(timeout=15)
 
 class WebServer(NetworkApplication):

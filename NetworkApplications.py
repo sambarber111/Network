@@ -2,13 +2,12 @@
 # -*- coding: UTF-8 -*-
 
 import argparse
-import ipaddress
 import socket
-import select
 import os
 import sys
 import struct
 import time
+import select
 
 
 def setupArgumentParser() -> argparse.Namespace:
@@ -168,8 +167,6 @@ class Traceroute(NetworkApplication):
     MAX_JUMPS = 20
 
     def sendOnePing(self, icmpSocket, destinationAddress):
-        dest = socket.gethostbyname(destinationAddress)
-
         # Create the header with a dummy checksum of 0.
         checksum = 0
         header = struct.pack("bbHHh", 8, 0, checksum, 1, 1)
@@ -190,9 +187,7 @@ class Traceroute(NetworkApplication):
         return time_sent
 
     def receiveOnePing(self, icmpSocket, timeLeft, time_sent, ttl):
-        started_select = time.time()
-        ready = select.select([icmpSocket], [], [], timeLeft)
-        time_in_select = time.time() - started_select
+        select.select([icmpSocket], [], [], timeLeft)
 
         # Record the time received.
         time_received = time.time()
